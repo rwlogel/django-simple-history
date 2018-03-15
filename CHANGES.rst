@@ -4,6 +4,7 @@ Changes
 Unreleased
 ----------
 - Add ability to specify custom history_id field (gh-368)
+- Add ability to specify alternative user_model for tracking
 
 2.0 (2018-04-05)
 ----------------
