@@ -23,19 +23,27 @@ from .manager import HistoryDescriptor
 registered_models = {}
 
 
+def default_get_user(request, **kwargs):
+    try:
+        return request.user
+    except AttributeError:
+        return None
+
+
 class HistoricalRecords(object):
     thread = threading.local()
 
     def __init__(self, verbose_name=None, bases=(models.Model,),
                  user_related_name='+', table_name=None, inherit=False,
                  history_id_field=None, user_model=None,
-                 excluded_fields=None):
+                 get_user=default_get_user, excluded_fields=None):
         self.user_set_verbose_name = verbose_name
         self.user_related_name = user_related_name
         self.table_name = table_name
         self.inherit = inherit
         self.history_id_field = history_id_field
         self.user_model = user_model
+        self.get_user = get_user
         if excluded_fields is None:
             excluded_fields = []
         self.excluded_fields = excluded_fields
@@ -72,15 +80,11 @@ class HistoricalRecords(object):
 
     def finalize(self, sender, **kwargs):
         inherited = False
-        try:
-            hint_class = self.cls
-        except AttributeError:  # called via `register`
-            pass
-        else:
-            if hint_class is not sender:  # set in concrete
-                inherited = (self.inherit and issubclass(sender, hint_class))
-                if not inherited:
-                    return  # set in abstract
+        if self.cls is not sender:  # set in concrete
+            inherited = (self.inherit and issubclass(sender, self.cls))
+            if not inherited:
+                return  # set in abstract
+
         if hasattr(sender._meta, 'simple_history_manager_attribute'):
             raise exceptions.MultipleRegistrationsError(
                 '{}.{} registered multiple times for history tracking.'.format(
@@ -303,12 +307,14 @@ class HistoricalRecords(object):
         try:
             return instance._history_user
         except AttributeError:
+            request = None
             try:
                 if self.thread.request.user.is_authenticated:
-                    return self.thread.request.user
-                return None
+                    request = self.thread.request
             except AttributeError:
-                return None
+                pass
+
+        return self.get_user(history=self, instance=instance, request=request)
 
 
 def transform_field(field):
